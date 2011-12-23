@@ -20,6 +20,7 @@ namespace zmax_test
 
             int[] clientPosition = { 0 };
             const int numberOfClients = 5;
+            const string host = "10.211.55.4";
 
             for (int i = 0; i < numberOfClients; i++)
             {
@@ -29,7 +30,7 @@ namespace zmax_test
                     Thread.Sleep(200 + 100 * i1);
                     using (var req = ctx.Socket(SocketType.REQ))
                     {
-                        req.Connect("tcp://192.168.1.1:8081");
+                        req.Connect("tcp://"+host+":8081");
                         while (!t.Token.IsCancellationRequested)
                         {
 
@@ -49,20 +50,24 @@ namespace zmax_test
             var store = Task.Factory.StartNew(() =>
             {
                 using (var req = ctx.Socket(SocketType.REP))
-                using (var f = File.Open("queue", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read))
                 {
-                    f.SetLength(1024 * 1024 * 50);
-                    req.Bind("tcp://192.168.1.1:8081");
-                    while (!t.Token.IsCancellationRequested)
+                    req.Bind("tcp://" + host + ":8081");
+
+                    using (var f = File.Open("queue", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read))
                     {
-                        var bytes = req.Recv();
-                        req.Send(new byte[0]); // ready
+                        f.SetLength(1024 * 1024 * 50);
+                        while (!t.Token.IsCancellationRequested)
+                        {
+                            var bytes = req.Recv();
 
-                        f.Write(bytes, 0, bytes.Length);
+                            f.Write(bytes, 0, bytes.Length);
 
-                        positions[storePosition] = f.Position;
-                        storePosition += 1;
-                        f.Flush();
+                            positions[storePosition] = f.Position;
+                            storePosition += 1;
+                            f.Flush();
+                            req.Send(new byte[0]); // ready
+
+                        }
                     }
                 }
             });
@@ -74,7 +79,7 @@ namespace zmax_test
             {
                 using (var pub = ctx.Socket(SocketType.PUB))
                 {
-                    pub.Bind("pgm://192.168.1.1:8082");
+                    pub.Bind("pgm://"+host+":8082");
                     Thread.Sleep(2000);
                     using (var f = File.Open("queue", FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                     {
@@ -100,7 +105,7 @@ namespace zmax_test
             {
                 using (var eh = ctx.Socket(SocketType.SUB))
                 {
-                    eh.Connect("pgm://192.168.1.1:8082");
+                    eh.Connect("pgm://"+host+":8082");
                     eh.Subscribe(new byte[0]);
                     while (true)
                     {
